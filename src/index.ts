@@ -11,13 +11,17 @@ import { pubKeyToAddress, hash } from '@erebos/keccak256'
 // these two values should be filled in by chat requester when starting a new chat
 // if they are empty, the code should initiate a new chat
 var keyTmpRequestPriv = undefined;	// the private key of the feed used to inform chat requester about responder user
-//var keyOtherPub = ""; 		// the public key of the chat requester
+if (typeof window !== 'undefined') {
+	var re = new RegExp('?[a-fA-Z0-9]*$);
+	var results = re.exec(window.location.href);
+	if (results) {
+		keyTmpRequestPriv = results[2];
+	}
+}
 
 // OMIT FOR BROWSER COMPILE
 // dev cheat for setting other user (2 is first arg after `ts-node scriptname`)
 if (process.argv.length > 2) {
-//	keyOtherPub = process.argv[2];
-//	console.log("using other from cli: " + keyOtherPub);
 	keyTmpRequestPriv = process.argv[2];
 	console.log("using tmpkey from cli: " + keyTmpRequestPriv);
 }
@@ -207,15 +211,9 @@ var bzr = new BzzAPI({ url: GATEWAY_URL });
 // the peer
 var keyPairOtherPub = undefined;
 var userOther = undefined;
-//if (keyOtherPub != "") {
-//	keyPairOtherPub = createPublic(keyOtherPub);
-//	userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
-//}
-
 
 // set up the session object
 var chatSession = new ChatSession(GATEWAY_URL, userSelf, signerSelf); 
-
 
 
 // debug
