@@ -10,14 +10,8 @@ import { pubKeyToAddress, hash } from '@erebos/keccak256'
 //
 // these two values should be filled in by chat requester when starting a new chat
 // if they are empty, the code should initiate a new chat
-var keyTmpRequestPriv = undefined;	// the private key of the feed used to inform chat requester about responder user
-if (typeof window !== 'undefined') {
-	var re = new RegExp('?[a-fA-Z0-9]*$);
-	var results = re.exec(window.location.href);
-	if (results) {
-		keyTmpRequestPriv = results[2];
-	}
-}
+let keyTmpRequestPriv = undefined;	// the private key of the feed used to inform chat requester about responder user
+
 
 // OMIT FOR BROWSER COMPILE
 // dev cheat for setting other user (2 is first arg after `ts-node scriptname`)
@@ -36,10 +30,10 @@ if (process.argv.length > 2) {
 //
 // everything below here must be immutable and usable for both requester and responder
 // the compiled version of it will be used in the script generation for the responser 
-var GATEWAY_URL = 'http://localhost:8500';
-var ZEROHASH = '0x0000000000000000000000000000000000000000000000000000000000000000';
-var MSGPERIOD = 1000;
-var MAXCONNECTIONPOLLS = 3;
+const GATEWAY_URL = 'http://localhost:8500';
+const ZEROHASH = '0x0000000000000000000000000000000000000000000000000000000000000000';
+const MSGPERIOD = 1000;
+const MAXCONNECTIONPOLLS = 3;
 
 
 // Represents messages sent between the peers
@@ -58,20 +52,21 @@ class ChatMessage {
 		this._serial = serial;
 	}
 
-	addPayload(payload: string) {
+	addPayload = (payload: string) => {
 		this._payload += payload;
 	}
 	
-	setEnd() {
+	setEnd = () => {
 		this._end = true;
 	}
 
-	toString(): string {
-		var o: any = {
+	toString = (): string => {
+		let o = {
 			serial: this._serial,
 			lastSelf: this._lastHashSelf,
 			lastOther: this._lastHashOther,
-			end: this._end
+			end: this._end,
+			payload: undefined
 		};
 		if (this._payload != "") {
 			o.payload = this._payload
@@ -110,39 +105,39 @@ class ChatSession {
 		this._ready = true;
 	}
 
-	userToTopic(user: string): string {
+	userToTopic = (user: string): string => {
 		return createHex(user).toBuffer();
 	}
 
-	getStarted(): number {
+	getStarted = (): number => {
 		return this._startedAt;
 	}
 
 	// create a new message from the current state
 	// the creation of new messages will be locked until the message is sent
 	// if locked, undefined will be returned
-	newMessage(): ChatMessage {
+	newMessage = (): ChatMessage => {
 		if (!this._ready) {
 			return undefined;
 		}
 		this._ready = false;
-		var msg = new ChatMessage(this._lastHashSelf, this._lastHashOther, this._serial);
+		let msg = new ChatMessage(this._lastHashSelf, this._lastHashOther, this._serial);
 		this._serial++;
 		return msg;
 	}
 
 	// attempts to post the message to the feed
 	// on success unlocks message creation (newMessage can be called again)
-	sendMessage(msg: ChatMessage) {
+	sendMessage = (msg: ChatMessage) => {
 		this._lastAt = Date.now();
 		console.log("todo SEND: " + msg);
 		this._ready = true;
 	}
 
 	// starts the retrieve and post loop after we know the user of the other party
-	start(userOther: string, secret: string): Promise<any> { 
-		var self = this;
-		return new Promise(function(whohoo, doh) {
+	start = (userOther: string, secret: string): Promise<any> => { 
+		let self = this;
+		return new Promise((whohoo, doh) => {
 			self._userOther = userOther;
 			self._topicMe = getFeedTopic({
 				name: self.userToTopic(self._userOther)
@@ -153,21 +148,21 @@ class ChatSession {
 	}
 
 	// make sure we have pings sent every period if no other message is in the process of being sent
-	_run(self: any) {
+	_run = (self: any) => {
 		if (self._ready && Date.now() - self._lastAt > MSGPERIOD) {
-			var msg = self.newMessage();
+			let msg = self.newMessage();
 			self.sendMessage(msg);
 		}
 	}
 
 	// teardown of chat session
-	stop(): Promise<any> {
-		var self = this;
-		return new Promise(function(whohoo, doh) {
+	stop = (): Promise<any> => {
+		let self = this;
+		return new Promise((whohoo, doh) => {
 			clearInterval(self._loop);
-			var tryStop = setInterval(function() {
+			let tryStop = setInterval(function() {
 				if (self._ready) {
-					var msg = self.newMessage();
+					let msg = self.newMessage();
 					msg.setEnd();
 					self.sendMessage(msg);
 					clearInterval(tryStop);
@@ -178,7 +173,7 @@ class ChatSession {
 	}
 
 	// perhaps we should abstract all BzzAPI calls instead
-	bzz(): any {
+	bzz = (): any => {
 		return this._bzz;
 	}
 }
@@ -186,34 +181,35 @@ class ChatSession {
 
 
 // us
-var keyPairSelf = createKeyPair();
-var keyPubSelf = keyPairSelf.getPublic("hex");
-var userSelf = pubKeyToAddress(createHex("0x" + keyPubSelf));
-var signerSelf = async bytes => sign(bytes, keyPairSelf.getPrivate());
+const keyPairSelf = createKeyPair();
+const keyPubSelf = keyPairSelf.getPublic("hex");
+const userSelf = pubKeyToAddress(createHex("0x" + keyPubSelf));
+const signerSelf = async bytes => sign(bytes, keyPairSelf.getPrivate());
 
 
 // the handshake feed 
-var keyPairTmp = createKeyPair(keyTmpRequestPriv);
-var keyTmpPub = keyPairTmp.getPublic("hex");
-var userTmp = pubKeyToAddress(createHex("0x" + keyTmpPub));
-var topicTmp = "0x";
+const keyPairTmp = createKeyPair(keyTmpRequestPriv);
+const keyTmpPub = keyPairTmp.getPublic("hex");
+const userTmp = pubKeyToAddress(createHex("0x" + keyTmpPub));
+let topicTmp = "0x";
 // BUG: createHex doesn't seem to work for the hash output, annoying!
-var topicTmpArray = hash(Buffer.from(keyPairTmp.getPrivate("hex"))); 
+let topicTmpArray = hash(Buffer.from(keyPairTmp.getPrivate("hex"))); 
 topicTmpArray.forEach(function(k) {
-	var s = "00" + Math.abs(k).toString(16);
+	let s = "00" + Math.abs(k).toString(16);
 	topicTmp += s.substring(s.length-2, s.length);
 	
 });
-var signerTmp = async bytes => sign(bytes, keyPairTmp.getPrivate());
-var bzr = new BzzAPI({ url: GATEWAY_URL });
+const signerTmp = async bytes => sign(bytes, keyPairTmp.getPrivate());
 
 
 // the peer
-var keyPairOtherPub = undefined;
-var userOther = undefined;
+let keyPairOtherPub = undefined;
+let userOther = undefined;
+
 
 // set up the session object
-var chatSession = new ChatSession(GATEWAY_URL, userSelf, signerSelf); 
+const chatSession = new ChatSession(GATEWAY_URL, userSelf, signerSelf); 
+
 
 
 // debug
@@ -228,12 +224,12 @@ console.log("other's feed: " + chatSession._topicOther);
 
 function uploadToFeed(bz: any, user: string, topic: string, data: string): Promise<any> {
 
-	var feedOptions = {
+	const feedOptions = {
 		user: user,
 		topic: topic,
 	}
 
-	return new Promise(function(whohoo, doh) {	
+	return new Promise((whohoo, doh) => {	
 		console.log("uploading " + data);
 		bz.upload(
 			data, 
@@ -247,12 +243,12 @@ function uploadToFeed(bz: any, user: string, topic: string, data: string): Promi
 }
 
 function downloadFromFeed(bz: any, user: string, topic: string): Promise<any> {
-	var feedOptions = {
+	const feedOptions = {
 		user: user,
 		topic: topic,
 	}
 
-	return bzr.getFeedContent(feedOptions, {
+	return bz.getFeedContent(feedOptions, {
 		mode: "raw",
 	});
 }
@@ -267,23 +263,23 @@ function publishResponseScript() {
 function startRequest() {
 
 	// BUG: why does signBytes have to be named "signBytes"? seems like scoping error below
-	var signBytes = signerTmp;
-	var bz = new BzzAPI({ url: GATEWAY_URL,  signBytes });
+	const signBytes = signerTmp;
+	const bz = new BzzAPI({ url: GATEWAY_URL,  signBytes });
 
 	// on success passes user address for peer
-	return new Promise(function(whohoo, doh) {
+	return new Promise((whohoo, doh) => {
 		uploadToFeed(bz, userTmp, topicTmp, keyPubSelf).then(function(myHash) {
 			console.log("uploaded to " + myHash);
 			publishResponseScript();
-			var attempts = 0;
-			var detectStart = setInterval(function() {
+			let attempts = 0;
+			const detectStart = setInterval(function() {
 				console.log("check if started, attempt " + attempts);
 				if (attempts > MAXCONNECTIONPOLLS) {
 					clearInterval(detectStart);
 					doh("timeout waiting for other side to respond");
 				}
 				downloadFromFeed(bz, userTmp, topicTmp).then(function(r) {
-					var currentHash = r.url.substring(r.url.length-65, r.url.length-1);
+					const currentHash = r.url.substring(r.url.length-65, r.url.length-1);
 					if (currentHash !== myHash) {
 						r.text().then(function(handshakeOther) {
 							// catch potential delayed stream reads
@@ -297,7 +293,7 @@ function startRequest() {
 							// set up the user info for the peer
 							// and start the chat session with that info
 							keyPairOtherPub = createPublic(handshakeOther.substring(0, 130));
-							var secret = handshakeOther.substring(130, 130+64);
+							let secret = handshakeOther.substring(130, 130+64);
 							userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 							chatSession.start(keyPairOtherPub, secret).then(function() {
 								setTimeout(function() {
@@ -323,13 +319,13 @@ function startRequest() {
 function startResponse() {
 
 	// TODO: derive proper secret from own privkey
-	var secret = ZEROHASH;
+	const secret = ZEROHASH;
 
 	// BUG: why does signBytes have to be named "signBytes"? seems like scoping error below
-	var signBytes = signerTmp;
-	var bz = new BzzAPI({ url: GATEWAY_URL,  signBytes });
+	const signBytes = signerTmp;
+	const bz = new BzzAPI({ url: GATEWAY_URL,  signBytes });
 
-	return new Promise(function(whohoo, doh) {
+	return new Promise((whohoo, doh) => {
 		downloadFromFeed(bz, userTmp, topicTmp).then(function(r) {
 			r.text().then(function(handshakePubOther) {
 				// NB these are globalsss
