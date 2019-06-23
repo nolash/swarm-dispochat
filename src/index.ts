@@ -32,10 +32,129 @@ if (process.argv.length > 2) {
 //
 // everything below here must be immutable and usable for both requester and responder
 // the compiled version of it will be used in the script generation for the responser 
+const VERSION = 1;
 const GATEWAY_URL = 'http://localhost:8500';
 const ZEROHASH = '0x0000000000000000000000000000000000000000000000000000000000000000';
 const MSGPERIOD = 1000;
 const MAXCONNECTIONPOLLS = 3;
+const AUTHORUSER = "beefc6472de3bba1d389ad8b18348c3df50d680c"; 
+const SCRIPTFEEDTOPIC = "646973706f636861745f73637269707400000000000000000000000000000000"; // name = dispochat_script
+const SCRIPTFEEDHASH = "c8b0051d921ae84f1676a24eaa7d509302dfbd9902dea17fbebe9e004a4a119b"; 
+const HTMLFEEDTOPIC = "646973706f636861745f68746d6c000000000000000000000000000000000000"; // name = dispochat_main, topic 
+const HTMLFEEDHASH = "4dce80c0210b318db31094a1e7c694179b24ac22b56f25d44582800f0ca07706";
+const FEEDMIME = 'application/bzz-feed';
+
+// creates a date string in format 0000-00-00T00:00:00+00:00
+function createManifestDate(timestamp?:number):string {
+	if (timestamp === undefined) {
+		timestamp = Date.now();
+	}
+	const ourDate = new Date(timestamp);
+	let dateString = ourDate.toISOString().substring(0, "0000-00-00T00:00:00".length);
+	const timeZone = ourDate.getTimezoneOffset();
+	if (timeZone < 0) {
+		dateString += '+';
+	} else {
+		dateString += '-';
+	}
+	const tzHours = Math.abs(Math.floor(ourDate.getTimezoneOffset() / 60));
+	const hoursString = tzHours.toString();
+	if (hoursString.length == 1) {
+		dateString += "0";
+	}
+	dateString += hoursString + ":";
+	const tzMinutes = ourDate.getTimezoneOffset() % 60;
+	const minutesString = tzMinutes.toString();
+	if (minutesString.length == 1) {
+		dateString += "0";
+	}
+	dateString += minutesString;
+	return dateString;
+}
+
+// varHash is the hash of the HEADER SCRIPT section above
+// size is the byte size of the contents of the header script
+//
+// To test the manifest is correct, update both feeds with MANIFESTS enclosing the following data:
+//
+// HTMLFEEDTOPIC (index.html):
+//
+//<html>
+//<head>
+//<script language="javascript" src="head.js"></script>
+//<script language="javascript" src="main.js"></script>
+//</head>
+//<body>
+//loaded...
+//</body>
+//</html>
+//
+// SCRIPTFEEDTOPIC (main.js):
+//
+//console.log(keyTmpRequestPriv);
+//
+//
+function createManifest(varHash:string, size:number):string {
+	const dateString = createManifestDate();
+	const dateStringZero = "0001-01-01T00:00:00Z";
+	let o = {entries: [
+		{
+			hash: varHash,
+			path: "head.js",
+			contentType: 'application/json',
+			mode: 420,
+			size: size,
+			mod_time: dateString,	
+		},
+		{
+			path: "main.js",
+			contentType: FEEDMIME,
+			mod_time: dateStringZero,
+			feed: {
+				user: "0x" + AUTHORUSER,
+				topic: "0x" + SCRIPTFEEDTOPIC,
+			}
+		},
+		{
+			path: "index.html",
+			contentType: FEEDMIME,
+			mod_time: dateStringZero,
+			feed: {
+				user: "0x" + AUTHORUSER,
+				topic: "0x" + HTMLFEEDTOPIC,
+			}
+		},
+		{
+			contentType: FEEDMIME,
+			mod_time: dateStringZero,
+			feed: {
+				user: "0x" + AUTHORUSER,
+				topic: "0x" + HTMLFEEDTOPIC,
+			}
+		}
+	]};
+	return JSON.stringify(o);	
+}
+
+// TODO: generate webpage on swarm. we only need to post the header script, then fake a manifest which links the application html and main script
+function publishResponseScript(bz:any, tmpPrivKey:string):Promise<string> {
+	return new Promise((whohoo,doh) => {
+		const headScript = "let keyTmpRequestPriv = '" + tmpPrivKey + "';\n";
+		bz.upload(
+			headScript,
+		).then((h) => {
+			const manifest = createManifest(h, headScript.length);
+			bz.upload(
+				manifest,
+			).then((h) => {
+				console.log("published manifest: " + h);
+				whohoo(h);
+			}).catch(doh);
+		}).catch(doh);	
+		let keyTmpRequestPriv = undefined;	// the private key of the feed used to inform chat requester about responder user
+		console.log("TODO: upload code to swarm for responder");
+	});
+}
 
 // Represents messages sent between the peers
 // A message without a payload is considered a "ping" message
@@ -229,18 +348,6 @@ let userOther = undefined;
 // set up the session object
 const chatSession = new ChatSession(GATEWAY_URL, userSelf, signerSelf); 
 
-
-
-// debug
-console.log("started: " + chatSession.getStarted());
-console.log("topic: " + topicTmp);
-console.log("user self: " + userSelf);
-console.log("tmp priv: " + keyPairTmp.getPrivate("hex"));
-console.log("pub self: " + keyPairSelf.getPublic("hex"));
-console.log("user other: " + userOther);
-console.log("other's feed: " + chatSession._topicOther);
-
-
 // crypto stuff
 function newPrivateKey() {
 	return ec.generatePrivate();
@@ -405,11 +512,6 @@ function downloadFromFeed(bz: any, user: string, topic: string): Promise<any> {
 	});
 }
 
-// TODO: generate webpage on swarm. we only need to post the header script, then fake a manifest which links the application html and main script
-function publishResponseScript() {
-	console.log("TODO: upload code to swarm for responder");
-	return
-}
 
 // Handle the handshake from the peer that responds to the invitation
 function startRequest() {
@@ -422,7 +524,7 @@ function startRequest() {
 	return new Promise((whohoo, doh) => {
 		uploadToFeed(bz, userTmp, topicTmp, keyPubSelf).then(function(myHash) {
 			console.log("uploaded to " + myHash);
-			publishResponseScript();
+			publishResponseScript(bz, keyPairTmp.getPrivate("hex"));
 			let attempts = 0;
 			const detectStart = setInterval(function() {
 				console.log("check if started, attempt " + attempts);
@@ -512,6 +614,17 @@ function startResponse() {
 		}).catch(doh);
 	});
 }
+
+
+// debug out central params
+console.log("started: " + chatSession.getStarted());
+console.log("topic: " + topicTmp);
+console.log("user self: " + userSelf);
+console.log("tmp priv: " + keyPairTmp.getPrivate("hex"));
+console.log("pub self: " + keyPairSelf.getPublic("hex"));
+console.log("user other: " + userOther);
+console.log("other's feed: " + chatSession._topicOther);
+
 
 if (keyTmpRequestPriv === undefined) {
 	startRequest().then(function(v) {
