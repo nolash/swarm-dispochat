@@ -444,9 +444,8 @@ function startRequest() {
 
 							// set up the user info for the peer
 							// and start the chat session with that info
-							const pubHex = handshakeOther.substring(0, 130);
-							keyPairOtherPub = createPublic(pubHex);
-							const pubArray = hexToArray(pubHex);
+							keyPairOtherPub = createPublic(handshakeOther); 
+							const pubArray = hexToArray(handshakeOther);
 							const pubBuffer = Buffer.from(pubArray);
 
 							ec.derive(keyPrivSelf, pubBuffer).then(function(secretBuffer) {
