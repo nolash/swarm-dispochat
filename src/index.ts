@@ -434,21 +434,33 @@ function startRequest() {
 
 							// set up the user info for the peer
 							// and start the chat session with that info
-							keyPairOtherPub = createPublic(handshakeOther.substring(0, 130));
-							let secret = handshakeOther.substring(130, handshakeOther.length);
+							const pubHex = handshakeOther.substring(0, 130);
+							keyPairOtherPub = createPublic(pubHex);
 							console.log("payload pub " + handshakeOther.substring(0, 130));
-							console.log("payload sec " + secret);
-							userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
-							chatSession.start(keyPairOtherPub, secret).then(function() {
-								setTimeout(function() {
-									chatSession.stop().then(function() {
-										console.log("stopped");
-									});
-								}, 3000);
-							});
+							const pubArray = hexToArray(pubHex);
+							console.log("secret pub array: " + pubArray.length + " " + pubArray);
 
-							// share the good news
-							whohoo(userOther);
+							const pubBuffer = Buffer.from(pubArray);
+							console.log("secret pub buffer: " + pubBuffer.length + " " + pubBuffer);
+
+							ec.derive(keyPrivSelf, pubBuffer).then(function(secretBuffer) {
+								console.log("secret array: " + secretBuffer.length + " " + secretBuffer);
+
+								const secret = arrayToHex(new Uint8Array(secretBuffer));
+								console.log("secret sresponse: " + secret.length + " " + " " + secret);
+
+								userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
+								chatSession.start(keyPairOtherPub, secret).then(function() {
+									setTimeout(function() {
+										chatSession.stop().then(function() {
+											console.log("stopped");
+										});
+									}, 3000);
+								});
+
+								// share the good news
+								whohoo(userOther);
+							});
 						});
 					}	
 				});
@@ -463,8 +475,8 @@ function startRequest() {
 function startResponse() {
 
 	// TODO: derive proper secret from own privkey
-	const secret = ZEROHASH;
-	console.log("secret zero: " + secret.length);
+	//const secret = ZEROHASH;
+	//console.log("secret zero: " + secret.length);
 
 	// BUG: why does signBytes have to be named "signBytes"? seems like scoping error below
 	const signBytes = signerTmp;
@@ -473,19 +485,34 @@ function startResponse() {
 	return new Promise((whohoo, doh) => {
 		downloadFromFeed(bz, userTmp, topicTmp).then(function(r) {
 			r.text().then(function(handshakePubOther) {
+
 				// NB these are globalsss
 				keyPairOtherPub = createPublic(handshakePubOther);
-				userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
-				uploadToFeed(bz, userTmp, topicTmp, keyPubSelf + ZEROHASH).then(function(myHash) {
-					chatSession.start(keyPairOtherPub, secret).then(function() {
-						setTimeout(function() {
-							chatSession.stop().then(function() {
-								console.log("stopped");
-							});
-						}, 3000);
+
+				const pubArray = hexToArray(handshakePubOther);
+				console.log("secret pub array: " + pubArray.length + " " + pubArray);
+
+				const pubBuffer = Buffer.from(pubArray);
+				console.log("secret pub buffer: " + pubBuffer.length + " " + pubBuffer);
+
+				ec.derive(keyPrivSelf, pubBuffer).then(function(secretBuffer) {
+					console.log("secret array: " + secretBuffer.length + " " + secretBuffer);
+
+					const secret = arrayToHex(new Uint8Array(secretBuffer));
+					console.log("secret sresponse: " + secret.length + " " + " " + secret);
+					
+					userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
+					uploadToFeed(bz, userTmp, topicTmp, keyPubSelf).then(function(myHash) {
+						chatSession.start(keyPairOtherPub, secret).then(function() {
+							setTimeout(function() {
+								chatSession.stop().then(function() {
+									console.log("stopped");
+								});
+							}, 3000);
+						});
+						whohoo(userOther);
 					});
-					whohoo(userOther);
-				});
+				}).catch(doh);
 			}).catch(doh);
 		}).catch(doh);
 	});
