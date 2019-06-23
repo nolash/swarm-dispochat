@@ -136,7 +136,7 @@ class ChatSession {
 	sendMessage = (msg: ChatMessage) => {
 		const self = this;
 		const payload = self._outCrypt.encrypt(msg.toString());
-		uploadToFeed(self._bzz, self._userMe, self._topicOther, payload).then((h) => {
+		uploadToFeed(self._bzz, self._userMe, self._topicMe, payload).then((h) => {
 			this._lastAt = Date.now();
 			console.log("uploaded to " + h);
 			self._lastHashSelf = h;
@@ -387,6 +387,7 @@ function uploadToFeed(bz: any, user: string, topic: string, data: string): Promi
 		).then(function(h) {
 			console.log("data uploaded to " + h);
 			bz.setFeedContentHash(feedOptions, h).then(function(r) {
+				console.log("set feed: " + user + "/" + topic + ": " +  h);
 				whohoo(h);
 			}).catch(doh);;
 		}).catch(doh);
@@ -452,7 +453,7 @@ function startRequest() {
 								const secret = arrayToHex(new Uint8Array(secretBuffer));
 
 								userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
-								chatSession.start(keyPairOtherPub, secret).then(function() {
+								chatSession.start(userOther, secret).then(function() {
 									setTimeout(function() {
 										chatSession.stop().then(function() {
 											console.log("stopped");
@@ -498,7 +499,7 @@ function startResponse() {
 					
 					userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 					uploadToFeed(bz, userTmp, topicTmp, keyPubSelf).then(function(myHash) {
-						chatSession.start(keyPairOtherPub, secret).then(function() {
+						chatSession.start(userOther, secret).then(function() {
 							setTimeout(function() {
 								chatSession.stop().then(function() {
 									console.log("stopped");
