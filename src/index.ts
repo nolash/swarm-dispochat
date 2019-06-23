@@ -37,7 +37,6 @@ const ZEROHASH = '0x000000000000000000000000000000000000000000000000000000000000
 const MSGPERIOD = 1000;
 const MAXCONNECTIONPOLLS = 3;
 
-
 // Represents messages sent between the peers
 // A message without a payload is considered a "ping" message
 // If end is set, peer must terminate the chat
@@ -142,12 +141,11 @@ class ChatSession {
 	// starts the retrieve and post loop after we know the user of the other party
 	start = (userOther: string, secret: string): Promise<any> => { 
 		let self = this;
-		console.log("secret: " + secret);
-//		if (secret.substring(0, 2) === "0x") {
-//			secret = secret.substring(2, secret.length-2);
-//		}
+		if (secret.substring(0, 2) === "0x") {
+			secret = secret.substring(2, secret.length);
+		}
 		this._inCrypt = new ChatCipher(secret);
-		this._outCrypt = this._inCrypt;
+		this._outCrypt = new ChatCipher(secret);
 		return new Promise((whohoo, doh) => {
 			self._userOther = userOther;
 			self._topicMe = getFeedTopic({
@@ -240,11 +238,12 @@ function newPrivateKey() {
 }
 
 function encryptSecret(pubkey, data) {
+	console.log("encrypting secret" + data);
 	return ec.encrypt(pubkey, Buffer.from(data));
 }
 
 function decryptSecret(privkey, data) {
-	console.log("decrypting" + data);
+	console.log("decrypting secret" + data);
 	return ec.decrypt(privkey, data);
 }
 
@@ -275,8 +274,9 @@ class ChatCipher {
 
 	// takes hex only for now
 	constructor(secret:string) {
-		const secretArray = createHex("0x" + secret).toBytesArray();
+		//const secretArray = createHex("0x" + secret).toBytesArray();
 		//this._aes = new aesjs.ModeOfOperation.ctr(secretArray, new aesjs.Counter(serial));
+		const secretArray = hexToArray(secret);
 		this._aes = new aesjs.ModeOfOperation.ecb(secretArray);
 	}
 
@@ -435,7 +435,9 @@ function startRequest() {
 							// set up the user info for the peer
 							// and start the chat session with that info
 							keyPairOtherPub = createPublic(handshakeOther.substring(0, 130));
-							let secret = handshakeOther.substring(130, 130+64);
+							let secret = handshakeOther.substring(130, handshakeOther.length);
+							console.log("payload pub " + handshakeOther.substring(0, 130));
+							console.log("payload sec " + secret);
 							userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 							chatSession.start(keyPairOtherPub, secret).then(function() {
 								setTimeout(function() {
@@ -462,6 +464,7 @@ function startResponse() {
 
 	// TODO: derive proper secret from own privkey
 	const secret = ZEROHASH;
+	console.log("secret zero: " + secret.length);
 
 	// BUG: why does signBytes have to be named "signBytes"? seems like scoping error below
 	const signBytes = signerTmp;
@@ -474,7 +477,7 @@ function startResponse() {
 				keyPairOtherPub = createPublic(handshakePubOther);
 				userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 				uploadToFeed(bz, userTmp, topicTmp, keyPubSelf + ZEROHASH).then(function(myHash) {
-					chatSession.start(keyPairOtherPub, ZEROHASH).then(function() {
+					chatSession.start(keyPairOtherPub, secret).then(function() {
 						setTimeout(function() {
 							chatSession.stop().then(function() {
 								console.log("stopped");
