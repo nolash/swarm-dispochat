@@ -101,7 +101,8 @@ class ChatSession {
 	_inCrypt:any				// output symmetric crypter
 
 	constructor(url: string, userMe: string, signer: any) {
-		this._bzz = new BzzAPI({ url: url, signer });
+		const signBytes = signer;
+		this._bzz = new BzzAPI({ url: url, signBytes });
 		this._userMe = userMe;
 		this._topicOther = getFeedTopic({
 			name: this.userToTopic(this._userMe)
@@ -133,9 +134,17 @@ class ChatSession {
 	// attempts to post the message to the feed
 	// on success unlocks message creation (newMessage can be called again)
 	sendMessage = (msg: ChatMessage) => {
-		this._lastAt = Date.now();
-		console.log("todo SEND: " + msg);
-		this._ready = true;
+		const self = this;
+		const payload = self._outCrypt.encrypt(msg.toString());
+		uploadToFeed(self._bzz, self._userMe, self._topicOther, payload).then((h) => {
+			this._lastAt = Date.now();
+			console.log("uploaded to " + h);
+			self._lastHashSelf = h;
+			self._ready = true;
+		}).catch(function(e) {
+			console.error("error uploading feed: " + e);
+			self._ready = true;
+		});
 	}
 
 	// starts the retrieve and post loop after we know the user of the other party
@@ -237,34 +246,34 @@ function newPrivateKey() {
 	return ec.generatePrivate();
 }
 
-function encryptSecret(pubkey, data) {
-	console.log("encrypting secret" + data);
-	return ec.encrypt(pubkey, Buffer.from(data));
-}
-
-function decryptSecret(privkey, data) {
-	console.log("decrypting secret" + data);
-	return ec.decrypt(privkey, data);
-}
-
-function serializeEncrypted(e) {
-	var o = {};
-	for (var k in e) {
-		o[k] = e[k].toString("hex");
-		console.log("setting k " + k + " " + o[k]);
-	}
-	return JSON.stringify(o)
-}
-
-function deserializeEncrypted(j) {
-	var o = JSON.parse(j)
-	var e = {};
-	for (var k in o) {
-		e[k] = Buffer.from(o[k], "hex");
-		console.log("getting k " + k + " " + e[k]);
-	}
-	return e;
-}
+//function encryptSecret(pubkey, data) {
+//	console.log("encrypting secret" + data);
+//	return ec.encrypt(pubkey, Buffer.from(data));
+//}
+//
+//function decryptSecret(privkey, data) {
+//	console.log("decrypting secret" + data);
+//	return ec.decrypt(privkey, data);
+//}
+//
+//function serializeEncrypted(e) {
+//	var o = {};
+//	for (var k in e) {
+//		o[k] = e[k].toString("hex");
+//		console.log("setting k " + k + " " + o[k]);
+//	}
+//	return JSON.stringify(o)
+//}
+//
+//function deserializeEncrypted(j) {
+//	var o = JSON.parse(j)
+//	var e = {};
+//	for (var k in o) {
+//		e[k] = Buffer.from(o[k], "hex");
+//		console.log("getting k " + k + " " + e[k]);
+//	}
+//	return e;
+//}
 
 
 // TODO: switch to CTR but needs renegotiation implemented
@@ -436,18 +445,11 @@ function startRequest() {
 							// and start the chat session with that info
 							const pubHex = handshakeOther.substring(0, 130);
 							keyPairOtherPub = createPublic(pubHex);
-							console.log("payload pub " + handshakeOther.substring(0, 130));
 							const pubArray = hexToArray(pubHex);
-							console.log("secret pub array: " + pubArray.length + " " + pubArray);
-
 							const pubBuffer = Buffer.from(pubArray);
-							console.log("secret pub buffer: " + pubBuffer.length + " " + pubBuffer);
 
 							ec.derive(keyPrivSelf, pubBuffer).then(function(secretBuffer) {
-								console.log("secret array: " + secretBuffer.length + " " + secretBuffer);
-
 								const secret = arrayToHex(new Uint8Array(secretBuffer));
-								console.log("secret sresponse: " + secret.length + " " + " " + secret);
 
 								userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 								chatSession.start(keyPairOtherPub, secret).then(function() {
@@ -488,18 +490,11 @@ function startResponse() {
 
 				// NB these are globalsss
 				keyPairOtherPub = createPublic(handshakePubOther);
-
 				const pubArray = hexToArray(handshakePubOther);
-				console.log("secret pub array: " + pubArray.length + " " + pubArray);
-
 				const pubBuffer = Buffer.from(pubArray);
-				console.log("secret pub buffer: " + pubBuffer.length + " " + pubBuffer);
 
 				ec.derive(keyPrivSelf, pubBuffer).then(function(secretBuffer) {
-					console.log("secret array: " + secretBuffer.length + " " + secretBuffer);
-
 					const secret = arrayToHex(new Uint8Array(secretBuffer));
-					console.log("secret sresponse: " + secret.length + " " + " " + secret);
 					
 					userOther = pubKeyToAddress(createHex("0x" + keyPairOtherPub.getPublic('hex')));
 					uploadToFeed(bz, userTmp, topicTmp, keyPubSelf).then(function(myHash) {
